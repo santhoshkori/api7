@@ -219,15 +219,25 @@ app.get("/tweets/:tweetId/", auth_middleware_fun, async (request, response) => {
     response.send("Invalid Request");
     response.status(401);
   } else {
-    const get_my_tweets_query = `SELECT tweet.tweet,COUNT(like.tweet_id) AS likes ,COUNT (reply.tweet_id)AS replies,date_time AS dateTime
+    const get_my_tweets_query = `
+    SELECT 
+     tweet.tweet,(SELECT COUNT(*)
+         FROM like
+        WHERE
+        like.tweet_id=tweet.tweet_id) AS likes,
+        (SELECT COUNT(*)
+         FROM reply
+        WHERE
+        reply.tweet_id=tweet.tweet_id) AS replies,
+        tweet.date_time AS dateTime
     FROM 
-    (tweet INNER JOIN like ON tweet.tweet_id=like.tweet_id) AS likestweer INNER JOIN reply ON likestweer.tweet_id=reply.tweet_id
-    WHERE
+    tweet 
+    WHERE 
     tweet.tweet_id=${tweetId}
-    GROUP BY 
+    GROUP BY
     tweet.tweet_id;`;
     const get_my_tweets = await tweet_db.all(get_my_tweets_query);
-    response.send(get_my_tweets[0]);
+    response.send(...get_my_tweets);
     //console.log(get_my_tweets);
   }
 });
@@ -290,12 +300,15 @@ app.get("/user/tweets/", auth_middleware_fun, async (request, response) => {
 
   const getalltweetquery = `
   SELECT 
-  tweet.tweet,COUNT(like.like_id) AS likes,COUNT(reply.reply_id)AS replies,tweet.date_time AS dateTime
-  FROM ((user INNER JOIN tweet ON user.user_id=tweet.user_id) AS usertweet INNER JOIN like ON like.tweet_id=usertweet.tweet_id) AS likeusertweet INNER JOIN reply ON likeusertweet.tweet_id=reply.tweet_id
-  
-  WHERE 
-  user.user_id=${login_user_id}
-  GROUP BY tweet.tweet
+  tweet.tweet,(SELECT COUNT(*) FROM like WHERE like.user_id=${login_user_id}) AS likes,
+  (SELECT COUNT(*) FROM reply WHERE reply.user_id=${login_user_id}) AS replies,
+  tweet.date_time AS dateTime
+  FROM 
+  tweet
+  WHERE
+  tweet.user_id=${login_user_id}
+  GROUP BY 
+  tweet.tweet_id
   ;`;
   const getalltweetofuser = await tweet_db.all(getalltweetquery);
   response.send(getalltweetofuser);
@@ -351,8 +364,8 @@ app.delete(
     const gettweet_of_use = await tweet_db.get(gettweet_of_user_query);
     console.log(gettweet_of_use);
     if (gettweet_of_use === undefined) {
-      response.send("Invalid Request");
       response.status(401);
+      response.send("Invalid Request");
     } else {
       const removetweet_query = `
         DELETE FROM tweet WHERE tweet.tweet_id=${tweetId};
